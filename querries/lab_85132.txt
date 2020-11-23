@@ -1,0 +1,2265 @@
+----------------------------------------------------------------------
+-- FUNCTION: public.func1_2()
+
+-- DROP FUNCTION public.func1_2();
+
+CREATE OR REPLACE FUNCTION public.func1_2(
+	)
+    RETURNS void
+    LANGUAGE 'sql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+update "Register" r set lab_grade=random_grade()
+where register_status='approved'  and has_lab(course_code)=true and serial_number=(select getcursemester()) and (lab_grade is null);
+	
+
+update "Register" r set exam_grade =random_grade()
+where register_status='approved' and serial_number=(select getcursemester()) and (exam_grade is null) ;
+
+								
+								
+
+$BODY$;
+
+ALTER FUNCTION public.func1_2()
+    OWNER TO postgres;
+--------------------------------------------------------------------
+
+-- FUNCTION: public.func1_3()
+
+-- DROP FUNCTION public.func1_3();
+
+CREATE OR REPLACE FUNCTION public.func1_3(
+	)
+    RETURNS void
+    LANGUAGE 'sql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+	Update "Diploma" d set thesis_grade=random_dipgrade()
+	where d.amka in (select S.amka from "Student" S
+	where date_part('year',entry_date)<=date_part('year',current_date)-5) and d.thesis_grade is null;
+
+$BODY$;
+
+ALTER FUNCTION public.func1_3()
+    OWNER TO postgres;
+-----------------------------------------------------------------------
+-- FUNCTION: public.func1_4(character)
+
+-- DROP FUNCTION public.func1_4(character);
+
+CREATE OR REPLACE FUNCTION public.func1_4(
+	dt character)
+    RETURNS void
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+BEGIN		
+	perform func1_3();
+	
+	UPDATE "Diploma"
+	SET
+		graduation_date = adapt_year(dt),
+		diploma_grade = (select tgrade from calc_diploma()where amk=amka),
+		diploma_num= (select dnum from calc_diploma()where amk=amka)
+	FROM calc_diploma() cl
+	wHERE cl.amk in (select amka from "Diploma") and (diploma_num is null);	
+	
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func1_4(character)
+    OWNER TO postgres;
+----------------------------------------------------------------------------
+-- FUNCTION: public.func1_5()
+
+-- DROP FUNCTION public.func1_5();
+
+CREATE OR REPLACE FUNCTION public.func1_5(
+	)
+    RETURNS void
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+BEGIN
+
+insert into "Register"
+select amka,semester_num,findregisterforone(amka),null as exam,null as final,null as lab,'proposed' as registerst from "Student",getcursemester();
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func1_5()
+    OWNER TO postgres;
+------------------------------------------------------------------------------
+-- FUNCTION: public.func1_6(integer)
+
+-- DROP FUNCTION public.func1_6(integer);
+
+CREATE OR REPLACE FUNCTION public.func1_6(
+	integer)
+    RETURNS void
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+DECLARE
+   cr integer;
+BEGIN
+
+insert into "CourseRun"
+select course_code,$1,gl.exmin,gl.lbmin,gl.exper,gl.lbus,$1,gl.amkaprof1,gl.amkaprof2 from "Course",getlatestdetailsforcourses($1) gl
+where typical_season=(select acad_seas from getfutsemester($1))
+and course_code = gl.ccode;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func1_6(integer)
+    OWNER TO postgres;
+----------------------------------------------------------------------------------
+-- FUNCTION: public.func2_1_1(integer)
+
+-- DROP FUNCTION public.func2_1_1(integer);
+
+CREATE OR REPLACE FUNCTION public.func2_1_1(
+	labcode integer)
+    RETURNS TABLE(nm character, sur character, mail character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	select l.name,l.surname,l.email 
+	from ("Professor" join "Lab" on (amka=profdirects)) l
+	where l.lab_code=labcode;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_1_1(integer)
+    OWNER TO postgres;
+
+COMMENT ON FUNCTION public.func2_1_1(integer)
+    IS 'Ανάκτηση ον/επ & email απο lab_code';
+----------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_1_2(character, integer, semester_season_type)
+
+-- DROP FUNCTION public.func2_1_2(character, integer, semester_season_type);
+
+CREATE OR REPLACE FUNCTION public.func2_1_2(
+	c_code character,
+	a_year integer,
+	a_season semester_season_type)
+    RETURNS TABLE(nm character, sur character, mail character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	select l.name,l.surname,l.email
+	from ("Professor" join (
+		select k.amka_prof1, k.amka_prof2
+		from ("CourseRun" join "Semester" on (semesterrunsin = semester_id)) k
+		where (k.course_code = c_code AND k.academic_year = a_year AND k.academic_season = a_season))as foo on (amka = amka_prof1 or amka = amka_prof2)) as l;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_1_2(character, integer, semester_season_type)
+    OWNER TO postgres;
+
+COMMENT ON FUNCTION public.func2_1_2(character, integer, semester_season_type)
+    IS 'Ανάκτηση ον/επ & email με
+course_code ,academic_year , academic_season';
+----------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_2(character, integer, semester_season_type, character)
+
+-- DROP FUNCTION public.func2_2(character, integer, semester_season_type, character);
+
+CREATE OR REPLACE FUNCTION public.func2_2(
+	c_code character,
+	a_year integer,
+	a_season semester_season_type,
+	grade_name character)
+    RETURNS TABLE(nm character, sur character, am character, grade numeric) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	
+	Select l.name, l.surname, l.am,
+	(case
+			when grade_name = 'exam_grade' then exam_grade
+			when grade_name = 'lab_grade' then lab_grade
+		    else final_grade
+	     end)as grade 
+	from ("Register" join "Student" using(amka)) l
+	where course_code = c_code
+	and serial_number = (
+		select semester_id from "Semester"
+		where academic_year = a_year AND academic_season = a_season);
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_2(character, integer, semester_season_type, character)
+    OWNER TO postgres;
+-----------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_3(rank_type)
+
+-- DROP FUNCTION public.func2_3(rank_type);
+
+CREATE OR REPLACE FUNCTION public.func2_3(
+	ranking rank_type)
+    RETURNS TABLE(nm character, srn character, srt character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	Select Distinct name, surname, sector_title from (
+		Select sector_title, lab_code
+		from "Lab" natural join "Sector") as foo
+	join (
+			Select  * 
+			from ("Professor" 
+				join (
+					select amka_prof1, amka_prof2
+					from "CourseRun" 
+					where semesterrunsin =(SELECT getcursemester())
+				) k on (amka = amka_prof1 or amka = amka_prof2)
+			) m
+		 ) d 
+	on ("labJoins" = lab_code)
+	where rank = ranking ;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_3(rank_type)
+    OWNER TO postgres;
+-------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_4()
+
+-- DROP FUNCTION public.func2_4();
+
+CREATE OR REPLACE FUNCTION public.func2_4(
+	)
+    RETURNS TABLE(ccode character, ctitle character, proof text) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+					
+select course_code,course_title,(
+	case 
+	when course_code in(
+			select course_code 
+			from "Course"
+			where course_code in(
+				select course_code 
+				from "CourseRun"
+				where semesterrunsin=(select getcursemester())		
+			)
+		)
+	then 'NAI' 
+	else 'OXI'
+	end
+	)as foo
+from "Course"
+where typical_season=(select academic_season from "Semester"
+				where semester_status='present'
+				) 
+order by course_code;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_4()
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------
+
+-- FUNCTION: public.func2_5(integer)
+
+-- DROP FUNCTION public.func2_5(integer);
+
+CREATE OR REPLACE FUNCTION public.func2_5(
+	amk integer)
+    RETURNS TABLE(ccode character, ctitle character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+
+select course_code,course_title from "Course"
+where course_code in(
+		select distinct course_code from "Register" r
+		where amka=amk and register_status='fail'
+
+		intersect
+	
+		select course_code from "Course"
+		where obligatory=true
+);
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_5(integer)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_6()
+
+-- DROP FUNCTION public.func2_6();
+
+CREATE OR REPLACE FUNCTION public.func2_6(
+	)
+    RETURNS TABLE(st character, ds bigint) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+select sector_title, diploma_sum from (
+	Select st.sector_title as sector_title, count(st.sector_code) as diploma_sum 
+	from(
+		Select d.amka, d.amka_super, s.sector_code, s.sector_title 
+		from "Diploma" d join (
+			Select amka, lab_code, sector_code, sector_title 
+			from ("Professor" join(
+				select * 
+				from ("Lab" join "Sector" using (sector_code))
+				) k on ("labJoins" = lab_code)
+			)
+		) s on (d.amka_super = s.amka)
+	) st
+	group by sector_title
+) as tabl
+where diploma_sum = (
+	select MAX(diploma_sum) from (
+	Select st.sector_title as sector_title, count(st.sector_code) as diploma_sum 
+	from(
+		Select d.amka, d.amka_super, s.sector_code, s.sector_title 
+		from "Diploma" d join (
+			Select amka, lab_code, sector_code, sector_title 
+			from ("Professor" join(
+				select * 
+				from ("Lab" join "Sector" using (sector_code))
+				) k on ("labJoins" = lab_code)
+			)
+		) s on (d.amka_super = s.amka)
+	) st
+	group by sector_title
+) as tabl);
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_6()
+    OWNER TO postgres;
+------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_7(integer, semester_season_type)
+
+-- DROP FUNCTION public.func2_7(integer, semester_season_type);
+
+CREATE OR REPLACE FUNCTION public.func2_7(
+	a_year integer,
+	a_season semester_season_type)
+    RETURNS TABLE(ccode character, ctitle character, percentage bigint) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+
+Select course_code, course_title, nd.percentage
+From "Course" join(
+	Select course_code, (studsPassing * 100 / studsAttending) as percentage
+	FROM (
+		Select course_code, count(*) as studsPassing 
+		From "Register" 
+		where serial_number = (Select getsemester(a_year,a_season)) and register_status = cast('pass' as register_status_type)
+		group by course_code) s
+	Join (
+		Select course_code, Count(*) as studsAttending 
+		From "Register" 
+		where serial_number = (Select getsemester(a_year,a_season)) 
+		group by course_code) d
+	using (course_code)
+	) as nd
+	using (course_code);
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_7(integer, semester_season_type)
+    OWNER TO postgres;
+----------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_8()
+
+-- DROP FUNCTION public.func2_8();
+
+CREATE OR REPLACE FUNCTION public.func2_8(
+	)
+    RETURNS TABLE(amk character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+
+Select am from "Graduation_rules" join "Student" s
+		on (year_rules = cast(left(s.am, 4) as integer)) join (
+			Select amka, count(*) as passedCourses, sum(units) as passedUnits from "Course" natural join (
+				select * from "Register"
+				where register_status = 'pass'
+				order by serial_number
+				) f
+			group by amka
+			) as dd using (amka)
+where min_courses <= passedCourses and min_units <= passedUnits;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_8()
+    OWNER TO postgres;
+-------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_9()
+
+-- DROP FUNCTION public.func2_9();
+
+CREATE OR REPLACE FUNCTION public.func2_9(
+	)
+    RETURNS TABLE(amk integer, surn character, nm character, sumhour bigint) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+select amka, surname,name, labsum from "LabStaff" join (
+	Select amka, sum(lab_hours) as labsum
+	from "Supports" natural join "Course" 
+	where serial_number = (Select getcursemester()) 
+	group by amka
+	order by amka) sds 
+using (amka);
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_9()
+    OWNER TO postgres;
+---------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_10(character)
+
+-- DROP FUNCTION public.func2_10(character);
+
+CREATE OR REPLACE FUNCTION public.func2_10(
+	cd character)
+    RETURNS TABLE(course_code character, course_title character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+	RETURN QUERY
+	WITH RECURSIVE Reqfunc(an,ds) AS (SELECT main as an,dependent as ds 
+						    FROM "Course_depends" 
+		                            WHERE dependent=$1
+						    UNION
+					          SELECT cd.main, rf.an
+						    FROM Reqfunc rf, "Course_depends" cd
+						    WHERE rf.an = cd.dependent
+	)
+	SELECT distinct an, c.course_title FROM Reqfunc, "Course" c WHERE an=c.course_code;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_10(character)
+    OWNER TO postgres;
+------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func2_11()
+
+-- DROP FUNCTION public.func2_11();
+
+CREATE OR REPLACE FUNCTION public.func2_11(
+	)
+    RETURNS TABLE(am character, nm character, surn character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+	return QUERY
+	select s.am,s.name,s.surname from "Student" s
+    	where amka in(
+    	select amka from "Register"
+    	where course_code in(
+    	select course_code from "Course"
+    	where left(course_code,3)='ΠΛΗ' and obligatory)
+    	and register_status='pass'
+    	group by amka
+    	having count(distinct course_code)=(	select count(*) from "Course"
+   							where left(course_code,3)='ΠΛΗ' and obligatory)
+   	order by amka);
+	
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.func2_11()
+    OWNER TO postgres;
+---------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func3_1_1()
+BEGIN
+
+	If (new.semester_status = 'present' and (
+			select count(*)
+			from "Semester"
+			where semester_status='present'
+		
+			)=1
+		) then
+			RAISE EXCEPTION 'NOT ALLOWED MORE THAN ONE PRESENT';
+			return null;
+		else
+			return new;
+		end if;
+END;
+
+-- Trigger: func3_1_1trigger
+
+-- DROP TRIGGER func3_1_1trigger ON public."Semester";
+
+CREATE TRIGGER func3_1_1trigger
+    BEFORE INSERT OR UPDATE 
+    ON public."Semester"
+    FOR EACH ROW
+    WHEN ((new.semester_status = 'present'::semester_status_type))
+    EXECUTE PROCEDURE public.func3_1_1trg();
+-----------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func3_1_2()
+BEGIN
+
+	--An yparxei past brosta apo present
+if ('past'::semester_status_type) in (select semester_status from "Semester"
+where semester_id>(select s.semester_id from "Semester" s
+where semester_status='present'
+)) or ('future'::semester_status_type)in(select semester_status from "Semester"
+where semester_id<(select min(s.semester_id) from "Semester" s
+where semester_status='present')) 
+then RAISE EXCEPTION 'WRONG PAST,PRESENT,FUTURE';
+else 
+	return new;
+end if;
+
+END;
+
+-- Trigger: func3_1_2trigger
+
+-- DROP TRIGGER func3_1_2trigger ON public."Semester";
+
+CREATE TRIGGER func3_1_2trigger
+    AFTER INSERT OR UPDATE 
+    ON public."Semester"
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.func3_1_2trg();
+---------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func3_1_3()
+BEGIN
+	 IF (SELECT count(*)
+	   FROM "Semester"
+	   WHERE EXTRACT(MONTH FROM(start_date))=EXTRACT(MONTH FROM(new.start_date)) AND 
+	   EXTRACT(YEAR FROM start_date)=EXTRACT(YEAR FROM new.start_date))=0
+	   then
+		NEW.semester_status='future';
+		RETURN NEW;
+	ELSE
+		RAISE EXCEPTION 'This semester exists';
+		RETURN NULL;
+	END IF;
+
+END;
+
+-- Trigger: func3_1_3trigger
+
+-- DROP TRIGGER func3_1_3trigger ON public."Semester";
+
+CREATE TRIGGER func3_1_3trigger
+    BEFORE INSERT
+    ON public."Semester"
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.func3_1_3trg();
+------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func3_2()
+BEGIN
+	PERFORM func1_2();
+	UPDATE "Register" 
+	SET 
+		final_grade = CASE WHEN (lab_min IS NULL or lab_min=0) THEN r.exam_grade
+			WHEN (r.exam_grade < exam_min) THEN 0
+			WHEN (lab_min IS NOT NULL AND r.lab_grade < lab_min) THEN 0
+			ELSE r.exam_grade * exam_percentage+ r.lab_grade * (1-exam_percentage) END,
+		register_status = CASE WHEN (CASE WHEN (lab_min IS NOT NULL AND r.lab_grade < lab_min) THEN 0
+			WHEN (lab_min IS NULL) THEN r.exam_grade
+			WHEN (r.exam_grade < exam_min) THEN 0
+			ELSE r.exam_grade * exam_percentage + r.lab_grade * (1-exam_percentage) END>=5) THEN 'pass'::register_status_type ELSE 'fail'::register_status_type END
+	FROM "CourseRun" c NATURAL JOIN "Register" r
+	WHERE "Register".amka=r.amka and "Register".course_code=r.course_code AND r.serial_number=OLD.semester_id AND (r.final_grade IS NULL);
+	RETURN NEW;
+END;
+
+-- Trigger: func3_2trigger
+
+-- DROP TRIGGER func3_2trigger ON public."Semester";
+
+CREATE TRIGGER func3_2trigger
+    BEFORE UPDATE 
+    ON public."Semester"
+    FOR EACH ROW
+    WHEN (((old.semester_status = 'present'::semester_status_type) AND (new.semester_status = 'past'::semester_status_type)))
+    EXECUTE PROCEDURE public.func3_2trg();
+---------------------------------------------------------------------------------------------------
+-- FUNCTION: public.func3_3()
+BEGIN
+		IF((SELECT COUNT(*)
+	    FROM (SELECT  main
+		  FROM "Course_depends" cd, 
+			(SELECT cr.course_code 
+			FROM "CourseRun" cr 
+			WHERE cr.serial_number=OLD.serial_number) crs
+		  WHERE mode='required' AND dependent=crs.course_code
+
+		  EXCEPT
+
+		  SELECT course_code
+		  FROM "Register" NATURAL JOIN "CourseRun"
+		  WHERE amka=OLD.amka AND register_status='pass') dt)>0
+		OR
+	   (SELECT COUNT(*)
+	    FROM "Register" rg NATURAL JOIN "CourseRun" cr
+	    WHERE rg.amka=OLD.amka AND rg.register_status='approved' AND cr.semesterrunsin=(SELECT distinct semesterrunsin FROM "CourseRun" WHERE serial_number=OLD.serial_number)) > 8) THEN
+			NEW.register_status='rejected';
+	ELSE
+			NEW.register_status='approved';
+			
+	END IF;
+	RETURN NEW;
+END;
+
+-- Trigger: func3_3trigger
+
+-- DROP TRIGGER func3_3trigger ON public."Register";
+
+CREATE TRIGGER func3_3trigger
+    BEFORE UPDATE 
+    ON public."Register"
+    FOR EACH ROW
+    WHEN ((((old.register_status = 'proposed'::register_status_type) OR (old.register_status = 'requested'::register_status_type)) AND (new.register_status = 'approved'::register_status_type)))
+    EXECUTE PROCEDURE public.func3_3trg();
+
+--------------------------------------------------------------------------------------------------------
+-- View: public.func4_1
+
+-- DROP VIEW public.func4_1;
+
+CREATE OR REPLACE VIEW public.func4_1 AS
+ SELECT "Course".course_code,
+    "Course".course_title,
+        CASE
+            WHEN foo.amka_prof2 IS NULL THEN (p1.surname::text || ' '::text) || p1.name::text
+            ELSE (((((p1.surname::text || ' '::text) || p1.name::text) || ', '::text) || p2.surname::text) || ' '::text) || p2.name::text
+        END AS professors
+   FROM "Professor" p2
+     RIGHT JOIN ("Professor" p1
+     JOIN ("Course"
+     JOIN ("Semester" s
+     JOIN "CourseRun" cr(course_code_1, serial_number, exam_min, lab_min, exam_percentage, labuses, semesterrunsin, amka_prof1, amka_prof2) ON s.semester_id = cr.semesterrunsin) foo(semester_id, academic_year, academic_season, start_date, end_date, semester_status, course_code, serial_number, exam_min, lab_min, exam_percentage, labuses, semesterrunsin, amka_prof1, amka_prof2) USING (course_code)) ON p1.amka = foo.amka_prof1) ON p2.amka = foo.amka_prof2
+  WHERE foo.semester_status = 'present'::semester_status_type;
+
+ALTER TABLE public.func4_1
+    OWNER TO postgres;
+
+------------------------------------------------------------------------------------------------------------
+-- View: public.func4_2
+
+-- DROP VIEW public.func4_2;
+
+CREATE OR REPLACE VIEW public.func4_2 AS
+ SELECT "Student".am,
+    "Student".surname,
+    "Student".name,
+    sum("Register".final_grade::double precision * "Course".weight) / sum("Course".weight) AS average_grade,
+    date_part('year'::text, "Semester".start_date) - date_part('year'::text, "Student".entry_date) +
+        CASE
+            WHEN "Semester".academic_season = 'winter'::semester_season_type THEN 1
+            ELSE 0
+        END::double precision AS current_year
+   FROM "Student"
+     JOIN "Register" USING (amka)
+     JOIN "CourseRun" USING (serial_number, course_code)
+     JOIN "Course" USING (course_code),
+    "Semester"
+  WHERE "Register".register_status = 'pass'::register_status_type AND "Course".obligatory AND "Semester".semester_status = 'present'::semester_status_type AND ("CourseRun".semesterrunsin = ("Semester".semester_id - 2) OR "CourseRun".semesterrunsin = ("Semester".semester_id -
+        CASE
+            WHEN "Semester".academic_season = 'winter'::semester_season_type THEN 1
+            ELSE 3
+        END)) AND "Course".typical_year::double precision = (date_part('year'::text, "Semester".start_date) - date_part('year'::text, "Student".entry_date) +
+        CASE
+            WHEN "Semester".academic_season = 'winter'::semester_season_type THEN 1
+            ELSE 0
+        END::double precision - 1::double precision)
+  GROUP BY "Student".am, "Student".surname, "Student".name, "Student".entry_date, "Semester".start_date, "Semester".academic_season;
+
+ALTER TABLE public.func4_2
+    OWNER TO postgres;
+
+------------------------------------------------------------------------------------------------------------------------
+-- View: public.show_diplomas
+
+-- DROP VIEW public.show_diplomas;
+
+CREATE OR REPLACE VIEW public.show_diplomas AS
+ SELECT s.am AS studentam,
+    s.name AS studentname,
+    s.surname AS studentsurname,
+    "left"(s.am::text, 4) AS entryyear,
+    d.thesis_grade AS thesisgrade,
+    p.name AS professorname,
+    p.surname AS professorsurname
+   FROM "Diploma" d
+     JOIN "Professor" p ON d.amka_super = p.amka
+     JOIN "Student" s ON d.amka = s.amka
+  ORDER BY d.amka;
+
+ALTER TABLE public.show_diplomas
+    OWNER TO postgres;
+
+
+CREATE TRIGGER viewupdatetrig
+    INSTEAD OF INSERT OR UPDATE 
+    ON public.show_diplomas
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.viewupdate();
+	
+	
+	-- Trigger: viewupdatetrig
+
+-- DROP TRIGGER viewupdatetrig ON public.show_diplomas;
+
+CREATE TRIGGER viewupdatetrig
+    INSTEAD OF INSERT OR UPDATE 
+    ON public.show_diplomas
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.viewupdate();
+
+-------------------------------------------------------------------------------------------------------------
+--FUNCTION viewupdate()--trigger function
+DECLARE 
+	new_prof_name character;
+	new_prof_surname character;
+BEGIN
+
+	IF(TG_OP = 'UPDATE') then
+		IF(new.studentAm <> old.studentAm) then
+			RAISE EXCEPTION 'AM cannot be altered';
+			RETURN null;
+		end if;
+		UPDATE "Diploma" set thesis_grade = new.thesisgrade where amka = (select amka from "Student" where am = new.studentAm);
+		UPDATE "Student" set name = new.studentname
+				where am = (select am from "Student" where am=new.studentam);
+						
+		UPDATE "Student" set surname = new.studentsurname where am in(select am from "Student" where am=new.studentAm);
+		UPDATE "Diploma" set amka_super = (select amka from "Professor" where name = new.professorname and surname = new. professorsurname) where amka = (select amka from "Student" where am = new.studentAm);
+		return new;
+	ELSEIF (TG_OP = 'INSERT') THEN
+		IF (new.studentAm not in (select am from "Diploma" natural join "Student" where thesis_grade is not null)) then
+			insert into "Diploma"(amka, thesis_grade, amka_super)
+			values(
+				(select amka from "Student" where am = new.studentAm),
+				new.thesisgrade,
+				(Select amka from "Professor" where name = new.professorname and surname = new.professorsurname)
+			);
+			return new;
+		else
+			Update "Diploma" 
+			set thesis_grade = new.thesisgrade, amka_super = (Select amka from "Professor" where name = new.professorname and surname = new.professorsurname)
+			where amka = (select amka from "Student" where am = new.studentAm);
+			return new;
+		end if;
+	end if;
+END;
+
+--------------------------------------------------------------------------------
+-- FUNCTION: public.getcursemester()
+
+-- DROP FUNCTION public.getcursemester();
+
+CREATE OR REPLACE FUNCTION public.getcursemester(
+	)
+    RETURNS TABLE(semester_num integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	select semester_id from "Semester"
+	where semester_status='present';
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.getcursemester()
+    OWNER TO postgres;
+------------------------------------------------------------------------------------
+-- FUNCTION: public.getfutsemester(integer)
+
+-- DROP FUNCTION public.getfutsemester(integer);
+
+CREATE OR REPLACE FUNCTION public.getfutsemester(
+	integer)
+    RETURNS TABLE(semester_num integer, acad_seas semester_season_type) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	select semester_id,academic_season from "Semester"
+	where semester_status='future' and semester_id=$1;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.getfutsemester(integer)
+    OWNER TO postgres;
+----------------------------------------------------------------------------------------
+
+-- FUNCTION: public.getlatestdetailsforcourses(integer)
+
+-- DROP FUNCTION public.getlatestdetailsforcourses(integer);
+
+CREATE OR REPLACE FUNCTION public.getlatestdetailsforcourses(
+	integer)
+    RETURNS TABLE(ccode character, exmin numeric, lbmin numeric, exper numeric, lbus integer, amkaprof1 integer, amkaprof2 integer, mx integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+DECLARE
+BEGIN	
+RETURN QUERY
+select course_code,exam_min,lab_min,exam_percentage,labuses,amka_prof1,amka_prof2,max(serial_number) from "CourseRun"
+where course_code in( select course_code from "Course" where typical_season=(select acad_seas from getfutsemester($1)))
+group by course_code ,exam_min,lab_min,exam_percentage,labuses,amka_prof1,amka_prof2;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.getlatestdetailsforcourses(integer)
+    OWNER TO postgres;
+---------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.getsemester(integer, semester_season_type)
+
+-- DROP FUNCTION public.getsemester(integer, semester_season_type);
+
+CREATE OR REPLACE FUNCTION public.getsemester(
+	a_year integer,
+	a_season semester_season_type)
+    RETURNS TABLE(semester_num integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY	
+	select semester_id from "Semester"
+	where academic_year = a_year AND academic_season = a_season;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.getsemester(integer, semester_season_type)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------
+
+-- FUNCTION: public.has_lab(character)
+
+-- DROP FUNCTION public.has_lab(character);
+
+CREATE OR REPLACE FUNCTION public.has_lab(
+	c character)
+    RETURNS boolean
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    IMMUTABLE 
+AS $BODY$
+
+declare
+sign integer;
+BEGIN
+	sign := 0;
+	sign := (select c.lab_hours from "Course" c where c.course_code = $1);
+
+	if sign > 0 then
+		return true;
+	end if;
+	return false;
+
+	
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.has_lab(character)
+    OWNER TO postgres;
+------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.insert_newlabstaff(integer)
+
+-- DROP FUNCTION public.insert_newlabstaff(integer);
+
+CREATE OR REPLACE FUNCTION public.insert_newlabstaff(
+	nm integer)
+    RETURNS void
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+BEGIN	
+	INSERT INTO "LabStaff"
+	SELECT ((select max(amka) from "LabStaff")+id)as lb,n.name,fn.name as father_name,adapt_surname(surname,n.sex),create_email('l'||(date_part('year',NOW()))||'0'||(select max(amka) from "LabStaff")+id),random_lslabworks(),random_lslevel()
+	FROM random_names(nm) n  join(random_fnames(nm) fn   join random_surnames(nm) using (id)) using(id);	
+	
+		
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.insert_newlabstaff(integer)
+    OWNER TO postgres;
+-----------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.insert_newprofessors(integer)
+
+-- DROP FUNCTION public.insert_newprofessors(integer);
+
+CREATE OR REPLACE FUNCTION public.insert_newprofessors(
+	nm integer)
+    RETURNS void
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+BEGIN	
+	INSERT INTO "Professor"
+	SELECT ((select max(amka) from "Professor")+id)as id,pr.name,fn.name as father_name,adapt_surname(surname,pr.sex),create_email('p'||(date_part('year',NOW()))||'0'||(select max(amka) from "Professor")+id+30),random_labjoins(),random_profRank()
+	FROM random_names(nm) pr  join(random_fnames(nm) fn   join random_surnames(nm) using (id)) using(id);	
+
+END
+
+$BODY$;
+
+ALTER FUNCTION public.insert_newprofessors(integer)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.insert_newstudent(double precision, integer, character)
+
+-- DROP FUNCTION public.insert_newstudent(double precision, integer, character);
+
+CREATE OR REPLACE FUNCTION public.insert_newstudent(
+	year double precision,
+	entnum integer,
+	date character)
+    RETURNS void
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+BEGIN	
+	INSERT INTO "Student"
+	SELECT ((select max(amka) from "Student")+id)as amk,n.name, fn.name,adapt_surname(surname,n.sex) ,create_email('s'||year||'000'|| ((select max(amka) from "Student")+id))as mail,(create_am(year,entnum)::integer+id-1)::character(10) as am ,adapt_year($3)as entry_date
+	FROM create_am(year,entnum),random_names(entnum) n  join(random_fnames(entnum) fn   join random_surnames(entnum) using (id)) using(id);
+	
+	
+END
+
+$BODY$;
+
+ALTER FUNCTION public.insert_newstudent(double precision, integer, character)
+    OWNER TO postgres;
+------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_dipgrade()
+
+-- DROP FUNCTION public.random_dipgrade();
+
+CREATE OR REPLACE FUNCTION public.random_dipgrade(
+	)
+    RETURNS numeric
+    LANGUAGE 'sql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+select floor(random() * (10-5) + 5)::numeric;
+
+$BODY$;
+
+ALTER FUNCTION public.random_dipgrade()
+    OWNER TO postgres;
+---------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_fnames(integer)
+
+-- DROP FUNCTION public.random_fnames(integer);
+
+CREATE OR REPLACE FUNCTION public.random_fnames(
+	n integer)
+    RETURNS TABLE(name character, sex character, id integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+SELECT nam.name, nam.sex, row_number() OVER ()::integer
+FROM (SELECT "Name".name, "Name".sex
+FROM "Name" where "Name".sex='M'
+ORDER BY random() LIMIT n) as nam;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.random_fnames(integer)
+    OWNER TO postgres;
+----------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_grade()
+
+-- DROP FUNCTION public.random_grade();
+
+CREATE OR REPLACE FUNCTION public.random_grade(
+	)
+    RETURNS numeric
+    LANGUAGE 'sql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+select ROUND((random() * (10-1) + 1)::numeric,1);
+
+$BODY$;
+
+ALTER FUNCTION public.random_grade()
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_labjoins()
+
+-- DROP FUNCTION public.random_labjoins();
+
+CREATE OR REPLACE FUNCTION public.random_labjoins(
+	)
+    RETURNS integer
+    LANGUAGE 'sql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+
+ 
+		
+SELECT floor(random() * 10 + 1 )::int;
+
+	--Τυχαιος αριθμος κωδικου εργαστηριου
+
+$BODY$;
+
+ALTER FUNCTION public.random_labjoins()
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_lslabworks()
+
+-- DROP FUNCTION public.random_lslabworks();
+
+CREATE OR REPLACE FUNCTION public.random_lslabworks(
+	)
+    RETURNS TABLE(lbwrks integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+
+SELECT floor(random() * 10 + 1 )::int;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.random_lslabworks()
+    OWNER TO postgres;
+---------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_names(integer)
+
+-- DROP FUNCTION public.random_names(integer);
+
+CREATE OR REPLACE FUNCTION public.random_names(
+	n integer)
+    RETURNS TABLE(name character, sex character, id integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+SELECT nam.name, nam.sex, row_number() OVER ()::integer
+FROM (SELECT "Name".name, "Name".sex
+FROM "Name"
+ORDER BY random() LIMIT n) as nam;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.random_names(integer)
+    OWNER TO postgres;
+-----------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_lslevel()
+
+-- DROP FUNCTION public.random_lslevel();
+
+CREATE OR REPLACE FUNCTION public.random_lslevel(
+	)
+    RETURNS TABLE(level level_type) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+SELECT  lvl.level from (select distinct l.level
+from "LabStaff" l) as lvl
+order by RANDOM()
+limit 1;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.random_lslevel()
+    OWNER TO postgres;
+-------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_profrank()
+
+-- DROP FUNCTION public.random_profrank();
+
+CREATE OR REPLACE FUNCTION public.random_profrank(
+	)
+    RETURNS TABLE(rnk rank_type) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+SELECT p.rank from (select distinct pr.rank
+from "Professor" pr) as p
+order by RANDOM()
+limit 1;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.random_profrank()
+    OWNER TO postgres;
+-----------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.random_surnames(integer)
+
+-- DROP FUNCTION public.random_surnames(integer);
+
+CREATE OR REPLACE FUNCTION public.random_surnames(
+	n integer)
+    RETURNS TABLE(surname character, id integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+RETURN QUERY
+SELECT snam.surname, row_number() OVER ()::integer
+FROM (SELECT "Surname".surname
+FROM "Surname"
+WHERE right("Surname".surname,2)='ΗΣ'
+ORDER BY random() LIMIT n) as snam;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.random_surnames(integer)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.adapt_surname(character, character)
+
+-- DROP FUNCTION public.adapt_surname(character, character);
+
+CREATE OR REPLACE FUNCTION public.adapt_surname(
+	surname character,
+	sex character)
+    RETURNS character
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    IMMUTABLE 
+AS $BODY$
+
+DECLARE
+result character(50);
+BEGIN
+result = surname;
+IF right(surname,2)<>'ΗΣ' THEN
+RAISE NOTICE 'Cannot handle this surname';
+ELSIF sex='F' THEN
+result = left(surname,-1);
+ELSIF sex<>'M' THEN
+RAISE NOTICE 'Wrong sex parameter';
+END IF;
+RETURN result;
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.adapt_surname(character, character)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.adapt_year(character)
+
+-- DROP FUNCTION public.adapt_year(character);
+
+CREATE OR REPLACE FUNCTION public.adapt_year(
+	cdate character)
+    RETURNS date
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    IMMUTABLE 
+AS $BODY$
+
+DECLARE
+temp date;
+BEGIN
+temp:=to_date(cdate,'DD Mon YYYY')  ;
+return temp;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.adapt_year(character)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.calc_diploma()
+
+-- DROP FUNCTION public.calc_diploma();
+
+CREATE OR REPLACE FUNCTION public.calc_diploma(
+	)
+    RETURNS TABLE(tgrade numeric, dnum bigint, amk integer) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+begin
+return QUERY
+
+select  diploma_grade,diplomanm,amka from(
+select  round( cast((course_grade*0.8 + thesis_grade*0.2) as numeric),2) as diploma_grade,((select max(diploma_num) from "Diploma")+row_number()over()) as diplomanm,amka
+from "Student" natural join "Diploma" join (
+	Select amka, avg(weight*final_grade) as course_grade
+	from "Course" join (
+	"Register" join(
+		select * 
+		from "Student" join (
+			Select * 
+			from func2_8()) as cc on (am = cc.amk)
+		) as ss using (amka)
+	) as rr using (course_code)
+where course_code in (Select course_code from "Register" join(
+	select * from "Student" join (
+		Select * from func2_8()) as cc on (am = cc.amk)
+	) as ss using (amka) 
+where register_status = 'pass')
+group by amka
+order by amka) as vv using (amka))as llo;
+		
+
+end
+
+$BODY$;
+
+ALTER FUNCTION public.calc_diploma()
+    OWNER TO postgres;
+-------------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.create_am(double precision, integer)
+
+-- DROP FUNCTION public.create_am(double precision, integer);
+
+CREATE OR REPLACE FUNCTION public.create_am(
+	yr double precision,
+	nm integer)
+    RETURNS text
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    IMMUTABLE 
+AS $BODY$
+
+BEGIN
+
+if yr not in (select distinct  date_part('year',entry_date)as year2 from "Student" )then
+return (select concat(yr::character(4),'000',lpad(min(foo.num)::text,3,'0'))from (select distinct (n.id-1)  as num
+from "Student",random_names(nm) n  join(random_fnames(nm) fn   join random_surnames(nm) using (id)) using(id))as foo
+order by concat);
+end if;
+
+if yr in  (select distinct  date_part('year',entry_date)as year2 from "Student" ) then
+return (
+select concat(yr::character(4),'000',lpad(min(foo.num)::text,3,'0')) from (select distinct((select max(right(am,3))::integer from "Student")+n.id)::text as num 
+from "Student",random_names(nm) n  join(random_fnames(nm) fn   join random_surnames(nm) using (id)) using(id))as foo
+order by concat);
+
+end if;
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.create_am(double precision, integer)
+    OWNER TO postgres;
+-----------------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.create_email(character)
+
+-- DROP FUNCTION public.create_email(character);
+
+CREATE OR REPLACE FUNCTION public.create_email(
+	str character)
+    RETURNS character
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    IMMUTABLE 
+AS $BODY$
+
+BEGIN
+ RETURN concat($1,'@isc.tuc.gr');
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.create_email(character)
+    OWNER TO postgres;
+--------------------------------------------------------------------------------------------------------------------------------------
+-- FUNCTION: public.findregisterforone(integer)
+
+-- DROP FUNCTION public.findregisterforone(integer);
+
+CREATE OR REPLACE FUNCTION public.findregisterforone(
+	integer)
+    RETURNS TABLE(cc character) 
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+    ROWS 1000
+AS $BODY$
+
+BEGIN
+return QUERY
+select course_code from "Course"
+where (typical_season=(select academic_season from "Semester" where semester_status='present' )
+and typical_year<= case when (select academic_season from "Semester" where semester_status='present' )='spring' then( (select academic_year from "Semester" where semester_status='present')-
+	(select date_part('year',entry_date)from "Student" where amka=$1))
+	 else   
+	   ((select academic_year from "Semester" where semester_status='present')-
+	(select date_part('year',entry_date)from "Student" where amka=$1))+1
+	  end
+and course_code not in(
+select distinct course_code from "Register"
+where amka=$1 and register_status='pass' or register_status='approved'));
+
+END;
+
+$BODY$;
+
+ALTER FUNCTION public.findregisterforone(integer)
+    OWNER TO postgres;
+----------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+-- Table: public."Course"
+
+-- DROP TABLE public."Course";
+
+CREATE TABLE public."Course"
+(
+    course_code character(7) COLLATE pg_catalog."default" NOT NULL,
+    course_title character(100) COLLATE pg_catalog."default" NOT NULL,
+    units smallint NOT NULL,
+    ects smallint NOT NULL,
+    weight real NOT NULL,
+    lecture_hours smallint NOT NULL,
+    tutorial_hours smallint NOT NULL,
+    lab_hours smallint NOT NULL,
+    typical_year smallint NOT NULL,
+    typical_season semester_season_type NOT NULL,
+    obligatory boolean NOT NULL,
+    course_description character varying COLLATE pg_catalog."default",
+    CONSTRAINT "Course_pkey" PRIMARY KEY (course_code)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Course"
+    OWNER to postgres;
+---------------------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."CourseRun"
+
+-- DROP TABLE public."CourseRun";
+
+CREATE TABLE public."CourseRun"
+(
+    course_code character(7) COLLATE pg_catalog."default" NOT NULL,
+    serial_number integer NOT NULL DEFAULT nextval('"CourseRun_serial_number_seq"'::regclass),
+    exam_min numeric,
+    lab_min numeric,
+    exam_percentage numeric,
+    labuses integer,
+    semesterrunsin integer NOT NULL,
+    amka_prof1 integer,
+    amka_prof2 integer,
+    CONSTRAINT "CourseRun_pkey" PRIMARY KEY (course_code, serial_number),
+    CONSTRAINT "CourseRun_amka_prof1_fkey" FOREIGN KEY (amka_prof1)
+        REFERENCES public."Professor" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "CourseRun_amka_prof2_fkey" FOREIGN KEY (amka_prof2)
+        REFERENCES public."Professor" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "CourseRun_labuses_fkey" FOREIGN KEY (labuses)
+        REFERENCES public."Lab" (lab_code) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "CourseRun_semesterrunsin_fkey" FOREIGN KEY (semesterrunsin)
+        REFERENCES public."Semester" (semester_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."CourseRun"
+    OWNER to postgres;
+------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Course_depends"
+
+-- DROP TABLE public."Course_depends";
+
+CREATE TABLE public."Course_depends"
+(
+    dependent character(7) COLLATE pg_catalog."default" NOT NULL,
+    main character(7) COLLATE pg_catalog."default" NOT NULL,
+    mode course_dependency_mode_type,
+    CONSTRAINT "Course_depends_pkey" PRIMARY KEY (dependent, main),
+    CONSTRAINT dependent FOREIGN KEY (dependent)
+        REFERENCES public."Course" (course_code) MATCH SIMPLE
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT main FOREIGN KEY (main)
+        REFERENCES public."Course" (course_code) MATCH SIMPLE
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Course_depends"
+    OWNER to postgres;
+
+-- Index: fk_course_depends_dependent
+
+-- DROP INDEX public.fk_course_depends_dependent;
+
+CREATE INDEX fk_course_depends_dependent
+    ON public."Course_depends" USING btree
+    (dependent COLLATE pg_catalog."default")
+    TABLESPACE pg_default;
+
+-- Index: fk_course_depends_main
+
+-- DROP INDEX public.fk_course_depends_main;
+
+CREATE INDEX fk_course_depends_main
+    ON public."Course_depends" USING btree
+    (main COLLATE pg_catalog."default")
+    TABLESPACE pg_default;
+-----------------------------------------------------------------------------------------------------------------------
+-- Table: public."Course_description"
+
+-- DROP TABLE public."Course_description";
+
+CREATE TABLE public."Course_description"
+(
+    course_code character(7) COLLATE pg_catalog."default" NOT NULL,
+    course_description character varying COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Course_description_pkey" PRIMARY KEY (course_code),
+    CONSTRAINT course_code FOREIGN KEY (course_code)
+        REFERENCES public."Course" (course_code) MATCH SIMPLE
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Course_description"
+    OWNER to postgres;
+-----------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Diploma"
+
+-- DROP TABLE public."Diploma";
+
+CREATE TABLE public."Diploma"
+(
+    amka integer NOT NULL,
+    thesis_grade numeric,
+    thesis_title character varying COLLATE pg_catalog."default",
+    diploma_grade numeric,
+    graduation_date date,
+    diploma_num integer,
+    amka_super integer,
+    amka_mem1 integer,
+    amka_mem2 integer,
+    CONSTRAINT "Diploma_pkey" PRIMARY KEY (amka),
+    CONSTRAINT "Diploma_amka_mem1_fkey" FOREIGN KEY (amka_mem1)
+        REFERENCES public."Professor" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "Diploma_amka_mem2_fkey" FOREIGN KEY (amka_mem2)
+        REFERENCES public."Professor" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "Diploma_amka_super_fkey" FOREIGN KEY (amka_super)
+        REFERENCES public."Professor" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Diploma"
+    OWNER to postgres;
+---------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Fields"
+
+-- DROP TABLE public."Fields";
+
+CREATE TABLE public."Fields"
+(
+    field_code character(3) COLLATE pg_catalog."default" NOT NULL,
+    field character(100) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Fields_pkey" PRIMARY KEY (field_code)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Fields"
+    OWNER to postgres;
+----------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Graduation_rules"
+
+-- DROP TABLE public."Graduation_rules";
+
+CREATE TABLE public."Graduation_rules"
+(
+    min_courses integer,
+    min_units integer,
+    year_rules integer NOT NULL,
+    CONSTRAINT "Graduation_rules_pkey" PRIMARY KEY (year_rules)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Graduation_rules"
+    OWNER to postgres;
+------------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Lab"
+
+-- DROP TABLE public."Lab";
+
+CREATE TABLE public."Lab"
+(
+    lab_code integer NOT NULL,
+    sector_code integer NOT NULL,
+    lab_title character(100) COLLATE pg_catalog."default" NOT NULL,
+    lab_description character varying COLLATE pg_catalog."default",
+    profdirects integer,
+    CONSTRAINT "Lab_pkey" PRIMARY KEY (lab_code),
+    CONSTRAINT "Lab_profdirects_fkey" FOREIGN KEY (profdirects)
+        REFERENCES public."Professor" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "Lab_sector_code_fkey" FOREIGN KEY (sector_code)
+        REFERENCES public."Sector" (sector_code) MATCH FULL
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+        NOT VALID
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Lab"
+    OWNER to postgres;
+
+-- Index: fk_lab_sector_code
+
+-- DROP INDEX public.fk_lab_sector_code;
+
+CREATE INDEX fk_lab_sector_code
+    ON public."Lab" USING btree
+    (sector_code)
+    TABLESPACE pg_default;
+------------------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."LabStaff"
+
+-- DROP TABLE public."LabStaff";
+
+CREATE TABLE public."LabStaff"
+(
+    amka integer NOT NULL DEFAULT nextval('"LabStaff_amka_seq"'::regclass),
+    name character(30) COLLATE pg_catalog."default" NOT NULL,
+    father_name character(30) COLLATE pg_catalog."default" NOT NULL,
+    surname character(30) COLLATE pg_catalog."default" NOT NULL,
+    email character(30) COLLATE pg_catalog."default",
+    labworks integer,
+    level level_type NOT NULL,
+    CONSTRAINT "LabStaff_pkey" PRIMARY KEY (amka),
+    CONSTRAINT "LabStaff_labworks_fkey" FOREIGN KEY (labworks)
+        REFERENCES public."Lab" (lab_code) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."LabStaff"
+    OWNER to postgres;
+----------------------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Lab_fields"
+
+-- DROP TABLE public."Lab_fields";
+
+CREATE TABLE public."Lab_fields"
+(
+    lab_code integer NOT NULL,
+    field_code character(3) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Lab_fields_pkey" PRIMARY KEY (field_code, lab_code),
+    CONSTRAINT "Lab_fields_field_code_fkey" FOREIGN KEY (field_code)
+        REFERENCES public."Fields" (field_code) MATCH FULL
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+        NOT VALID,
+    CONSTRAINT "Lab_fields_lab_code_fkey" FOREIGN KEY (lab_code)
+        REFERENCES public."Lab" (lab_code) MATCH FULL
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+        NOT VALID
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Lab_fields"
+    OWNER to postgres;
+
+-- Index: fk_lab_field_lab_code
+
+-- DROP INDEX public.fk_lab_field_lab_code;
+
+CREATE INDEX fk_lab_field_lab_code
+    ON public."Lab_fields" USING btree
+    (lab_code)
+    TABLESPACE pg_default;
+
+-- Index: fk_lab_fields_field_code
+
+-- DROP INDEX public.fk_lab_fields_field_code;
+
+CREATE INDEX fk_lab_fields_field_code
+    ON public."Lab_fields" USING btree
+    (field_code COLLATE pg_catalog."default")
+    TABLESPACE pg_default;
+-------------------------------------------------------------------------------------------------------------
+-- Table: public."Name"
+
+-- DROP TABLE public."Name";
+
+CREATE TABLE public."Name"
+(
+    name character(30) COLLATE pg_catalog."default" NOT NULL,
+    sex character(1) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Names_pkey" PRIMARY KEY (name)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Name"
+    OWNER to postgres;
+---------------------------------------------------------------------------------------------------------------
+-- Table: public."Professor"
+
+-- DROP TABLE public."Professor";
+
+CREATE TABLE public."Professor"
+(
+    amka integer NOT NULL DEFAULT nextval('"Professor_amka_seq"'::regclass),
+    name character(30) COLLATE pg_catalog."default" NOT NULL,
+    father_name character(30) COLLATE pg_catalog."default" NOT NULL,
+    surname character(30) COLLATE pg_catalog."default" NOT NULL,
+    email character(30) COLLATE pg_catalog."default",
+    "labJoins" integer,
+    rank rank_type NOT NULL,
+    CONSTRAINT "Professor_pkey" PRIMARY KEY (amka),
+    CONSTRAINT "Professor_labJoins_fkey" FOREIGN KEY ("labJoins")
+        REFERENCES public."Lab" (lab_code) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Professor"
+    OWNER to postgres;
+--------------------------------------------------------------------------------------------------------------------
+-- Table: public."Register"
+
+-- DROP TABLE public."Register";
+
+CREATE TABLE public."Register"
+(
+    amka integer NOT NULL,
+    serial_number integer NOT NULL,
+    course_code character(7) COLLATE pg_catalog."default" NOT NULL,
+    exam_grade numeric,
+    final_grade numeric,
+    lab_grade numeric,
+    register_status register_status_type,
+    CONSTRAINT "Register_pkey" PRIMARY KEY (course_code, serial_number, amka),
+    CONSTRAINT "Register_amka_fkey" FOREIGN KEY (amka)
+        REFERENCES public."Student" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "Register_course_run_fkey" FOREIGN KEY (serial_number, course_code)
+        REFERENCES public."CourseRun" (serial_number, course_code) MATCH SIMPLE
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Register"
+    OWNER to postgres;
+
+-- Trigger: func3_3trigger
+
+-- DROP TRIGGER func3_3trigger ON public."Register";
+
+CREATE TRIGGER func3_3trigger
+    BEFORE UPDATE 
+    ON public."Register"
+    FOR EACH ROW
+    WHEN ((((old.register_status = 'proposed'::register_status_type) OR (old.register_status = 'requested'::register_status_type)) AND (new.register_status = 'approved'::register_status_type)))
+    EXECUTE PROCEDURE public.func3_3trg();
+-------------------------------------------------------------------------------------------------------------------
+-- Table: public."Sector"
+
+-- DROP TABLE public."Sector";
+
+CREATE TABLE public."Sector"
+(
+    sector_code integer NOT NULL,
+    sector_title character(100) COLLATE pg_catalog."default" NOT NULL,
+    sector_description character varying COLLATE pg_catalog."default",
+    CONSTRAINT "Sector_pkey" PRIMARY KEY (sector_code)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Sector"
+    OWNER to postgres;
+----------------------------------------------------------------------------------------------------------------------
+-- Table: public."Student"
+
+-- DROP TABLE public."Student";
+
+CREATE TABLE public."Student"
+(
+    amka integer NOT NULL DEFAULT nextval('"Student_amka_seq"'::regclass),
+    name character(30) COLLATE pg_catalog."default" NOT NULL,
+    father_name character(30) COLLATE pg_catalog."default" NOT NULL,
+    surname character(30) COLLATE pg_catalog."default",
+    email character(30) COLLATE pg_catalog."default",
+    am character(10) COLLATE pg_catalog."default",
+    entry_date date,
+    CONSTRAINT "Student_pkey" PRIMARY KEY (amka),
+    CONSTRAINT "Student_am_key" UNIQUE (am)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Student"
+    OWNER to postgres;
+----------------------------------------------------------------------------------------------------------------------
+-- Table: public."Semester"
+
+-- DROP TABLE public."Semester";
+
+CREATE TABLE public."Semester"
+(
+    semester_id integer NOT NULL,
+    academic_year integer,
+    academic_season semester_season_type,
+    start_date date,
+    end_date date,
+    semester_status semester_status_type NOT NULL,
+    CONSTRAINT "Semester_pkey" PRIMARY KEY (semester_id)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Semester"
+    OWNER to postgres;
+
+-- Trigger: func3_1_1trigger
+
+-- DROP TRIGGER func3_1_1trigger ON public."Semester";
+
+CREATE TRIGGER func3_1_1trigger
+    BEFORE INSERT OR UPDATE 
+    ON public."Semester"
+    FOR EACH ROW
+    WHEN ((new.semester_status = 'present'::semester_status_type))
+    EXECUTE PROCEDURE public.func3_1_1trg();
+
+-- Trigger: func3_1_2trigger
+
+-- DROP TRIGGER func3_1_2trigger ON public."Semester";
+
+CREATE TRIGGER func3_1_2trigger
+    AFTER INSERT OR UPDATE 
+    ON public."Semester"
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.func3_1_2trg();
+
+-- Trigger: func3_1_3trigger
+
+-- DROP TRIGGER func3_1_3trigger ON public."Semester";
+
+CREATE TRIGGER func3_1_3trigger
+    BEFORE INSERT
+    ON public."Semester"
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.func3_1_3trg();
+
+-- Trigger: func3_2trigger
+
+-- DROP TRIGGER func3_2trigger ON public."Semester";
+
+CREATE TRIGGER func3_2trigger
+    BEFORE UPDATE 
+    ON public."Semester"
+    FOR EACH ROW
+    WHEN (((old.semester_status = 'present'::semester_status_type) AND (new.semester_status = 'past'::semester_status_type)))
+    EXECUTE PROCEDURE public.func3_2trg();
+----------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Supports"
+
+-- DROP TABLE public."Supports";
+
+CREATE TABLE public."Supports"
+(
+    amka integer NOT NULL,
+    serial_number integer NOT NULL,
+    course_code character(7) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Supports_pkey" PRIMARY KEY (amka, serial_number, course_code),
+    CONSTRAINT "Supports_amka_fkey" FOREIGN KEY (amka)
+        REFERENCES public."LabStaff" (amka) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT "Supports_course_code_fkey" FOREIGN KEY (serial_number, course_code)
+        REFERENCES public."CourseRun" (serial_number, course_code) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Supports"
+    OWNER to postgres;
+------------------------------------------------------------------------------------------------------------------------------------------
+-- Table: public."Surname"
+
+-- DROP TABLE public."Surname";
+
+CREATE TABLE public."Surname"
+(
+    surname character(50) COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT "Surnames_pkey" PRIMARY KEY (surname)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public."Surname"
+    OWNER to postgres;
+--------------------------------------------------------------------------------------------------------------------------------------------
+Ένας υπάλληλος (Emp) χαρακτηρίζεται μοναδικά από ένα αναγνωριστικό (eid), ενώ επίσης έχει όνομα (ename), ηλικία (age) και μισθό (salary).
+Ένας τμήμα (Dept) χαρακτηρίζεται μοναδικά από ένα αναγνωριστικό (did), ενώ επίσης έχει όνομα (dname), προϋπολογισμό (budget) και ένα διευθυντή (managerID).
+Ένας υπάλληλος μπορεί να εργάζεται σε περισσότερα από ένα τμήμα. Το πεδίο pctTime στη σχέση Works δείχνει το ποσοστό του χρόνου που ένας υπάλληλος εργάζεται σε ένα συγκεκριμένο τμήμα.
+ 
+
+Emp(eid: integer, ename: string, age: integer, salary: real)
+
+Works(empid: integer, deptid: integer, pct time: integer)
+
+Dept(did: integer, dname: string, budget: real, managerID: integer)
+
+ 
+
+Τυπώστε τα ονόματα των manager που δεν είναι δηλωμένοι (στη σχέση Works) ότι εργάζονται στα τμήματα τα οποία διευθύνουν
+
+
+--1.2
+select ename from(
+select ename from "dept" join "emp" on ("dept".manager_id="emp".eid)
+where eid not in(
+select empid from "works") and did not in (select deptid from "works")
+order by manager_id)as loo
+
+
+Τυπώστε τα ονόματα και την ηλικία κάθε υπαλλήλου που εργάζεται ταυτόχρονα και στο τμήμα “Hardware”, και στο τμήμα “Software”.
+
+--1.3
+select ename,age from "works" full join "emp" on("works".empid="emp".eid)
+where deptid in(select did from "dept"
+where dname='Software')
+
+intersect
+
+select ename,age from "works" full join "emp" on("works".empid="emp".eid)
+where deptid in(select did from "dept"
+where dname='Hardware')
+
+
+
+Τυπώστε το όνομα κάθε υπαλλήλου που (α) δεν είναι manager οποιουδήποτε τμήματος και που (β) έχει μισθό μεγαλύτερο από τον προϋπολογισμό όλων των τμημάτων στα οποία εργάζεται.
+
+--1.4
+select ename from "emp"
+where eid not in(
+select manager_id from "dept")
+
+intersect
+
+select distinct ename from "works" full join "dept" on ("works".deptid="dept".did) right join "emp" on("emp".eid="works".empid)
+where salary>budget
+except (
+select distinct ename from "works" full join "dept" on ("works".deptid="dept".did) right join "emp" on("emp".eid="works".empid)
+where salary<=budget)
+
+Τυπώστε για κάθε τμήμα το όνομά του και τον αριθμό των υπαλλήλων ηλικίας >= 50 ετών που εργάζονται σε αυτό.
+
+--1.5
+select dname,count(eid) from "dept" full join "works" on ("works".deptid="dept".did) full join "emp" on ("works".empid="emp".eid)
+where age>=50
+group by did
+order by did
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE student_audit
+(
+  id SERIAL PRIMARY KEY,
+  operation character(1),
+  operation_time timestamp with time zone,
+  am character(20),
+  message character varying
+);
+
+CREATE OR REPLACE FUNCTION student_update()  RETURNS trigger AS
+$BODY$
+BEGIN
+	IF (TG_OP = 'DELETE') THEN
+		   INSERT INTO student_audit(operation,operation_time,am,message) 
+		   SELECT 'D', now(), OLD.am, CONCAT('Deletion Attempted: ', OLD.name,' ',OLD.surname);
+		   RETURN NULL;
+	ELSIF (TG_OP = 'UPDATE') THEN
+		   IF (NEW.am <> OLD.am) THEN
+			INSERT INTO student_audit(operation,operation_time,am,message) 
+			SELECT 'U', now(), NEW.am, CONCAT('AM Update denied:',' ',NEW.am);
+			RETURN NULL;
+		   ELSE
+			INSERT INTO student_audit(operation,operation_time,am,message) 
+			SELECT 'U', now(), NEW.am, CONCAT(NEW.name,' ',NEW.surname);
+			NEW.surname = OLD.surname;
+			RETURN NEW;
+		   END IF;
+	ELSIF (TG_OP = 'INSERT') THEN
+		   IF (CAST( date_part('year',now()) as text ) = left(NEW.am,4)) THEN
+			insert into student_audit(operation,operation_time,am,message) 
+			SELECT 'I', now(), NEW.am, CONCAT(ΞΞ•W.name,' ',NEW.surname);
+			RETURN NEW;
+		   ELSE
+			RAISE EXCEPTION 'Invalid AM';
+		   END IF;
+	END IF;
+END;
+$BODY$
+LANGUAGE plpgsql
+
+CREATE TRIGGER student_monitor BEFORE INSERT OR UPDATE OR DELETE ON "Student_small"
+FOR EACH ROW EXECUTE PROCEDURE student_update();
+
+CREATE VIEW student_view AS 
+select sm.* , sa.last_updated
+from "Student_small" sm join
+	(select am, max(operation_time) as last_updated
+	from student_audit 
+	group by am) as sa on (sm.am=sa.am)
+
+
+
+------------------------------------------------------------------------------------------
+
+-- Table: public.works
+
+-- DROP TABLE public.works;
+
+CREATE TABLE public.works
+(
+    empid integer NOT NULL,
+    deptid integer NOT NULL,
+    pct_time integer,
+    CONSTRAINT works_pkey PRIMARY KEY (empid, deptid)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public.works
+    OWNER to postgres;
+
+GRANT SELECT ON TABLE public.works TO labuser;
+
+GRANT ALL ON TABLE public.works TO postgres;
+
+
+
+-- Table: public.emp
+
+-- DROP TABLE public.emp;
+
+CREATE TABLE public.emp
+(
+    eid integer NOT NULL DEFAULT nextval('emp_eid_seq'::regclass),
+    ename character varying COLLATE pg_catalog."default",
+    age integer,
+    salary real,
+    CONSTRAINT emp_pkey PRIMARY KEY (eid)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public.emp
+    OWNER to postgres;
+
+GRANT SELECT ON TABLE public.emp TO labuser;
+
+GRANT ALL ON TABLE public.emp TO postgres;
+
+-- Table: public.dept
+
+-- DROP TABLE public.dept;
+
+CREATE TABLE public.dept
+(
+    did integer NOT NULL DEFAULT nextval('dept_did_seq'::regclass),
+    dname character varying COLLATE pg_catalog."default",
+    budget real,
+    manager_id integer,
+    CONSTRAINT dept_pkey PRIMARY KEY (did)
+)
+WITH (
+    OIDS = FALSE
+)
+TABLESPACE pg_default;
+
+ALTER TABLE public.dept
+    OWNER to postgres;
+
+GRANT SELECT ON TABLE public.dept TO labuser;
+
+GRANT ALL ON TABLE public.dept TO postgres;
