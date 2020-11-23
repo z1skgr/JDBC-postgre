@@ -1,0 +1,120 @@
+Data management (construction of postgreSQL functions)
+1.1. On the basis given to you there are 2 Tables Name, Surname containing Greek names and adjectives.
+Based on the data given to you in these tables, create functions (for teachers,
+laboratory staff and students) who will allow the entry of personal data
+based on random choice of names and surnames. These functions will accept as
+the number of records to be created. In addition, for the creation of students there will be
+a parameter for the registration date in the department.
+EEEAAAA where EUSE, the year of registration date and AAAA A unique (per year)
+serial number. The level of teachers and laboratory staff members will be selected at random
+from the corresponding set of possible values. The laboratory in which both are integrated is not selected
+also randomly from all the laboratories recorded on the base. 
+
+1.2. Insertion of a score in six-month courses of the current semester for students who have not
+still rated as follows: A random integer will be entered from 1 to 10 as a grade
+written examination. Similarly, the degree of laboratory will be introduced if the course is laboratory. The final
+score is calculated in accordance with the scoring rules mentioned. 
+
+1.3 . Insertion of grades for those diplomatic work that have not yet been completed and which concern students
+who have completed five years of study. The degree of diplomacy will be a random integer
+from 5 to 10. 
+
+1.4. Designation of graduates for all students who have not graduated and meet the criteria
+graduation (to locate them see and function 2.8). In the case of the declaration, it is necessary to
+calculation and recording of the degree of diploma in accordance with the rules mentioned, the
+graduation date (given as an input parameter to the function) and serial production
+diploma number taking into account the last serial number of a diploma stored in the
+on the basis of ensuring that each diploma number is unique. 
+
+1.5. Creation of proposed student enrolments in six-month courses for the current semester,
+taking into account their normal semester of study and any courses from previous years that are not
+It's been a while. 
+
+1.6. Insertion of half-yearly courses for a certain semester which is in a "future" state.
+A six-month course (CourseRun) is created for each course (Course) which has been
+typical_season equal to the academic_season of the six-month period in question. The scoring rules (grade_rules), the
+teachers and (for laboratory courses) laboratory staff and laboratory
+(Lab) are copied from the most recent semester course for the same course (Course). 
+
+
+Data recovery and calculations (construction of postgreSQL functions)
+2.1. Retrieving a teacher's name and email with the following alternative criteria: (a) Code
+laboratory conducted by a professor or (b) Course code, academic year (academic_year) and
+six months (academic_season).
+
+2.2. Retrieving a full name, registration number and rating based on category (final, written examination,
+workshop) of all students enrolled in a six-month course (the entrance will be given as the
+course code, academic year (academic_year) and semester (academic_season) and category
+score).
+
+2.3. Retrieval of the name and domain of all teachers of a specific level who teach the
+the current six-month period.
+
+2.4. Recovery of all courses (code and title) provided for in the programme to be taught
+the current academic semester with the indication YES or NO depending on whether or not the
+the current six-month period.
+
+2.5. Recovery of compulsory courses that have not yet been successfully attended by a particular
+student (the student's AMKA is given) in order to be able to graduate.
+
+2.6. Finding the sector or areas where most graduate diplomatic work was carried out. The
+field of elaboration results from the laboratory in which the supervising professor is integrated.
+
+2.7. Presentation of courses (code, title) of a specific academic year (academic_year) and
+academic semester (academic_season) together with student success rates.
+
+2.8. Retrieving the registration number of students who meet the graduation requirements and who have not
+still graduating. 
+
+2.9. Finding the burden of all lab staff in the current semester. The load is calculated as the
+sum of the workshop hours for the courses supported by each member of the laboratory
+Staff. The result will be a table with columns: (AMKA, last name, first name, sum of hours).
+Each number of this table corresponds to one member of laboratory staff. In the result, the
+all laboratory staff members, even if they have zero load. 
+
+2.10 Recovery of all courses that are pre-required or recommended, directly or indirectly, for a
+specific course of which the code is given. The result is many of the format: (code
+course, course title).
+
+2.11. Recovery of students (registration number, full name) who have successfully attended all
+compulsory IT courses
+
+
+
+
+Triggers functionality in postgreSQL
+3.1.Automatic correctness check when creating and updating semesters based on dates
+start and end so that it does not overlap with any other registered semester. Also check
+should be done automatically for the chronological consistency of the six-month situation.
+That is, do not violate the time series of semesters on the basis of past, present, future, nor
+allow multiple semesters with the indication present.
+
+3.2. Automatic calculation of final score and new status (pass / fail) of student enrolments in
+courses at the close of the current semester. Activated when the status of the current
+updated from "present" to "past".
+
+3.3. Automatic verification of the validity of student enrolment in a six-month course in order to satisfy the
+restrictions on prerequisite courses and the total teaching units of the courses to be
+attended by the student together with this course not to exceed 35 teaching units or the
+number of courses does not exceed 8. Audit is enabled after SQL statements are executed
+information (e.g. from the secretariat of the department) in which the registration status (register_status)
+is updated from "requested" or "requested" to "approved" . If the check fails then the situation becomes
+"rejected". 
+
+
+
+Functionality through views
+4.1. Presentation of course code, course title and teacher (last name and first name) for
+all half-yearly courses of the current semester. In the event that there are two teachers
+the third column of the face will appear as: <surname1><name1>,<surname2><name2>
+
+4.2. Presentation of the annual grade of the students and the year of study. For each student, the
+registration number, full name, annual grade and year of study. The annual grade of a student
+is the average of the grades of the courses successfully completed in the previous academic year.
+Year. The annual grade is calculated only for students who have successfully completed all
+courses of the normal curriculum of the semesters of the previous academic year. The
+calculation is proportional to that for the degree of diploma (multiplication of each degree with the
+weight factor of the course, summation of the individual products and division by the sum of the
+rates), but only the compulsory and compulsory courses of the
+programme of study of the previous year, while the additional courses provided for in the
+completed by the student. 
