@@ -16,6 +16,9 @@ given below) and then the data will be entered. Otherwise, it will be existing r
 # How to run
 Import in a database platform. <br />
 
-Project has been created in postgreSQL.
+Database has been created in postgreSQL.
 
 The external project for connection database with the application has been done with jdbc and eclipse platform. For more information check jdbc and database chaining.
+
+JDBC project has been created in eclipse.
+Compile and run for execution.
