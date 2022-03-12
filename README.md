@@ -1,4 +1,4 @@
-# Data-Base/JDBC
+# db/JDBC
 > Communication PostgreSQL with external java platform
  
   
