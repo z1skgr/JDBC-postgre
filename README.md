@@ -14,7 +14,7 @@ _JDBC (J ava D ata b ase C onnectivity)_ is a standard Java API for database and
 
 
 ## Features
-1. Opening of Conciliation / Validation of Conciliation
+1. Opening of Conciliation / Validation. 
 2. Presentation of a detailed student score based on A.M. 
 3. Change of score based on A.M. and course code. The change will concern the most recent course run 
 4. Back up on a different basis to the same server[^1].
