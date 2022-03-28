@@ -25,6 +25,7 @@ _JDBC (J ava D ata b ase C onnectivity)_ is a standard Java API for database and
 
 ## How to run
 1. Make a new java project in IDE.
+2. Build a '.db' file or clone the one in the archive
 2. Import  `java.sql` libraries.
 3. Create a connection with database (_driverManager.getConnection(url)_)
 4. Build and run.
