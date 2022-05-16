@@ -19,7 +19,7 @@ _JDBC (J ava D ata b ase C onnectivity)_ is a standard Java API for database and
 3. Change of score based on A.M. and course code. The change will concern the most recent course run 
 4. Back up on a different basis to the same server[^1].
 
- ## Technoologies Used
+ ## Technologies Used
 * Java IDE environment (Eclipse implemented)
 * PostgreSQL
 
