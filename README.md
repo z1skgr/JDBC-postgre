@@ -35,4 +35,4 @@ _JDBC (J ava D ata b ase C onnectivity)_ is a standard Java API for database and
 
 
 [^1]: It will be given as input the name of the table and the name of the base to be created the copy of the table.
-[^2]: On file `querries` you can see a sample database
+[^2]: On file `querries` you can see database samples
