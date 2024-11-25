@@ -1,4 +1,4 @@
-# db/JDBC
+# DB/JDBC
 > Communication PostgreSQL with external java platform
  
   
@@ -10,7 +10,7 @@
 * [Acknowledgements](#acknowledgements)
 
 ## General Information
-_JDBC (J ava D ata b ase C onnectivity)_ is a standard Java API for database and java language connection). In this project, we implement a java project to link a database (implemented in postgreSQL) and build an interface between them.  
+_JDBC (J ava D ata B ase C onnectivity)_ is a standard Java API for database and java language connection). In this project, we implement a java project to link a database (implemented in postgreSQL) and build an interface between them.  
 
 
 ## Features
