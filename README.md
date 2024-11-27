@@ -27,7 +27,7 @@ _JDBC (J ava D ata B ase C onnectivity)_ is a standard Java API for database and
     * Java code configured for database superuser password: `postgres`
     * Using Quick Links on pgAdmin gui, add new server
     * On general tab, add `postgres`
-    * On connection tab->Host name, [^3][^4]
+    * On connection tab->Host name, [^3]
         Hostname ->  `localhost`
         port     ->  `5432`
         username ->  `postgres`
