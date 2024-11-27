@@ -20,8 +20,21 @@ _JDBC (J ava D ata B ase C onnectivity)_ is a standard Java API for database and
 4. Back up on a different basis to the same server[^1].
 
  ## Technologies Used
-* Java IDE environment (Eclipse implemented)
-* PostgreSQL
+* Java IDE environment ([Eclipse](https://www.eclipse.org/downloads/packages/) implemented)
+    * [jdbc driver](https://jdbc.postgresql.org/download/)
+* PostgreSQL/pgAdmin
+    * Install [postgreSQL](https://www.postgresql.org/download/) using required steps
+    * Java code configured for database superuser password: `postgres`
+    * Using Quick Links on pgAdmin gui, add new server
+    * On general tab, add `postgres`
+    * On connection tab->Host name, [^3][^4]
+        Hostname ->  `localhost`
+        port     ->  `5432`
+        username ->  `postgres`
+        password ->  `postgres`
+    * On `postgres` database -> Restore `dbwithmanystudents`
+
+        
 
 ## How to run
 1. Make a new java project in IDE.
@@ -36,3 +49,5 @@ _JDBC (J ava D ata B ase C onnectivity)_ is a standard Java API for database and
 
 [^1]: It will be given as input the name of the table and the name of the base to be created the copy of the table.
 [^2]: On file `querries` you can see database samples
+[^3]: db_Connect has arguments ip, port, database name, username, password with these names
+
