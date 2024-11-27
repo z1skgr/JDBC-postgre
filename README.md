@@ -28,10 +28,10 @@ _JDBC (J ava D ata B ase C onnectivity)_ is a standard Java API for database and
     * Using Quick Links on pgAdmin gui, add new server
     * On general tab, add `postgres`
     * On connection tab->Host name, [^3]
-        Hostname ->  `localhost`
-        port     ->  `5432`
-        username ->  `postgres`
-        password ->  `postgres`
+        * Hostname ->  `localhost`
+        * port     ->  `5432`
+        * username ->  `postgres`
+        * password ->  `postgres`
     * On `postgres` database -> Restore `dbwithmanystudents`
 
         
